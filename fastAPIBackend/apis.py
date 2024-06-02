@@ -6,9 +6,9 @@ import ast
 from git import Repo
 import stat
 import errno
-
+from Config.DatabaseConnector import Connection 
 app = FastAPI()
-
+connInstance=Connection()
 class RepoInput(BaseModel):
     repo_url: HttpUrl
 
@@ -73,6 +73,8 @@ def extract_functions_from_repo(clone_path: str):
 @app.post("/repos/")
 async def analyze_repo(repo: RepoInput):
     repo_url = repo.repo_url
+    #connInstance.insertRepo(repo_url)
+    connInstance.getRepoId(repo_url)
     clone_path = "./cloned_repo"
     try:
         clone_repo(repo_url, clone_path)
