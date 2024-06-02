@@ -25,8 +25,9 @@ def handle_remove_readonly(func, path, exc_info):
     else:
         raise
 
-def extract_function_metadata(node, file_content, class_name, file_name):
+def extract_function_metadata(node, file_content, class_name, file_name, repo_id, file_id):
     function_code = ast.get_source_segment(file_content, node)
+    connInstance.insertFunctionMetadata(repo_id, file_id, class_name, node.name, function_code)
     return {
         "class_name": class_name,
         "function_name": node.name,
@@ -42,7 +43,7 @@ def extract_classes_from_file(file_path: str):
     class_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
     return class_names
 
-def extract_functions_from_file(file_path: str):
+def extract_functions_from_file(file_path: str, repo_id, file_id):
     with open(file_path, "r") as file:
         file_content = file.read()
     tree = ast.parse(file_content)
@@ -54,31 +55,34 @@ def extract_functions_from_file(file_path: str):
             break
     function_metadata = []
     for func_node in functions:
-        function_metadata.append(extract_function_metadata(func_node, file_content, class_name, os.path.basename(file_path)))
+        function_metadata.append(extract_function_metadata(func_node, file_content, class_name, os.path.basename(file_path), repo_id, file_id))
     return function_metadata, class_name
 
-def extract_functions_from_repo(clone_path: str):
+def extract_functions_from_repo(clone_path: str, repo_id):
     functions_metadata = {}
     class_names = set()
     for root, _, files in os.walk(clone_path):
         for file in files:
+            file_id=connInstance.insertFile(repo_id, file)
             if file.endswith(".py"):
                 file_path = os.path.join(root, file)
-                function_metadata, class_name = extract_functions_from_file(file_path)
+                function_metadata, class_name = extract_functions_from_file(file_path, repo_id, file_id)
                 functions_metadata[file_path] = function_metadata
                 if class_name:
                     class_names.add(class_name)
+    for class_name in class_names:
+        connInstance.insertClass(repo_id, class_name)
     return functions_metadata, list(class_names)
 
 @app.post("/repos/")
 async def analyze_repo(repo: RepoInput):
     repo_url = repo.repo_url
     #connInstance.insertRepo(repo_url)
-    connInstance.getRepoId(repo_url)
+    repo_id=connInstance.getRepoId(repo_url)
     clone_path = "./cloned_repo"
     try:
         clone_repo(repo_url, clone_path)
-        functions_metadata, class_names = extract_functions_from_repo(clone_path)
+        functions_metadata, class_names = extract_functions_from_repo(clone_path, repo_id)
         all_classes = []
         for root, _, files in os.walk(clone_path):
             for file in files:
